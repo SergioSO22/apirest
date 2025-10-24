@@ -45,12 +45,6 @@ La interfaz se cargará automáticamente.
 
 ### 📊 Panel de Estadísticas
 
-En la parte superior verás tres tarjetas con estadísticas en tiempo real:
-
-- **Total Productos**: Número total de productos en la base de datos
-- **Valor Total**: Valor total del inventario (precio × stock de todos los productos)
-- **Stock Total**: Suma de todas las unidades en stock
-
 Las estadísticas se actualizan automáticamente al crear, editar o eliminar productos.
 
 ### ➕ Crear Nuevo Producto
