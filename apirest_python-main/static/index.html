@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API REST - Gestor de Personas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👥 Gestor de Personas - API REST</h1>
+            <p class="subtitle">Interfaz gráfica para probar la API de personas</p>
+        </header>
+
+        <!-- Sección de estadísticas -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-number" id="totalPersonas">0</div>
+                <div class="stat-label">Total Personas</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="edadPromedio">0</div>
+                <div class="stat-label">Edad Promedio</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="personasConEmail">0</div>
+                <div class="stat-label">Con Email</div>
+            </div>
+        </div>
+
+        <!-- Formulario para crear/actualizar persona -->
+        <div class="form-container">
+            <h2 id="formTitle">➕ Crear Nueva Persona</h2>
+            <form id="personaForm">
+                <input type="hidden" id="personaId">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nombre">Nombre *</label>
+                        <input type="text" id="nombre" required placeholder="Ej: Juan">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="apellido">Apellido *</label>
+                        <input type="text" id="apellido" required placeholder="Ej: Pérez">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="edad">Edad *</label>
+                        <input type="number" id="edad" required placeholder="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telefono">Teléfono</label>
+                        <input type="text" id="telefono" placeholder="Ej: +123456789">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="Ej: juan@ejemplo.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="direccion">Dirección</label>
+                    <textarea id="direccion" rows="2" placeholder="Dirección completa (opcional)"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="fecha_nacimiento">Fecha de Nacimiento</label>
+                    <input type="date" id="fecha_nacimiento">
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="submitText">Crear Persona</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="cancelBtn" onclick="cancelarEdicion()" style="display: none;">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabla de personas -->
+        <div class="table-container">
+            <div class="table-header">
+                <h2>👤 Lista de Personas</h2>
+                <button class="btn btn-refresh" onclick="cargarPersonas()">
+                    🔄 Actualizar
+                </button>
+            </div>
+
+            <div id="loadingSpinner" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Cargando personas...</p>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <div class="empty-icon">📭</div>
+                <h3>No hay personas registradas</h3>
+                <p>Comienza agregando tu primera persona usando el formulario de arriba</p>
+            </div>
+
+            <table id="personasTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Apellido</th>
+                        <th>Edad</th>
+                        <th>Email</th>
+                        <th>Teléfono</th>
+                        <th>Dirección</th>
+                        <th>Fecha Nac.</th>
+                        <th>Fecha Registro</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="personasBody">
+                    <!-- Las personas se cargarán aquí -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Notificaciones -->
+        <div id="notification" class="notification"></div>
+    </div>
+
+    <footer>
+        <p>API REST con Flask y SQLite | <span id="apiStatus">🔴 Desconectado</span></p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
