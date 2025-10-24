@@ -1,0 +1,67 @@
+# Local
+docker-compose up -d
+curl http://localhost:5000/productos
+
+# En EC2
+sudo yum update -y
+sudo yum install docker -y
+sudo systemctl start docker
+sudo docker-compose up -d
+
+
+---------------------------------------------
+
+# Probar que la API esté funcionando
+curl http://localhost:5000/
+
+# Ver logs de la aplicación
+docker logs python_api
+
+#CREATE---------------------------------------
+
+curl -X POST http://localhost:5000/productos \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Monitor", "precio":299.99, "stock":15}'
+  
+  
+#READ-------------------------------
+
+curl http://localhost:5000/productos
+
+# Reemplaza :id con el ID del producto
+curl http://localhost:5000/productos/1
+
+#UPDATE----------------------------------------
+
+curl -X PUT http://localhost:5000/productos/1 \
+  -H "Content-Type: application/json" \
+  -d '{"nombre":"Laptop Gamer", "precio":1500.00, "stock":5}'
+
+#DELETE------------------------------------------
+
+# Reemplaza :id con el ID del producto a eliminar
+curl -X DELETE http://localhost:5000/productos/1
+
+
+#VARIOS----------------
+
+# Detener la aplicación
+docker-compose down
+
+# Reiniciar la aplicación
+docker-compose restart
+
+# Ver logs en tiempo real
+docker logs -f python_api
+
+# Ver logs de la base de datos
+docker logs postgres_db
+
+#LIMPIEZA------------------------------------
+
+# Detener y eliminar contenedores y volúmenes
+docker-compose down -v
+
+# Limpiar sistema Docker
+docker system prune -a -f
+
