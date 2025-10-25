@@ -1,13 +1,18 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, redirect, url_for
 import psycopg2
 import os
 from datetime import datetime
-from contextlib import contextmanager # Importación clave para el manejo de recursos
+from contextlib import contextmanager
+# Importar dotenv
+from dotenv import load_dotenv 
+
+# Cargar variables de entorno desde el archivo .env
+load_dotenv() 
 
 app = Flask(__name__)
 
 # --- Configuración de la base de datos ---
-# Se recomienda usar un archivo .env o Docker para estas variables
+# Se recomienda usar Docker o variables de entorno para producción
 DATABASE_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'database': os.environ.get('DB_NAME', 'crud_db'),
@@ -17,7 +22,7 @@ DATABASE_CONFIG = {
 }
 
 # ----------------------------------------------------------------------
-# 🌟 MEJORA 1: Manejo de Conexiones (Context Manager)
+# 🌟 MEJORA: Manejo de Conexiones (Context Manager)
 # ----------------------------------------------------------------------
 
 @contextmanager
@@ -51,7 +56,6 @@ def get_db_cursor(commit=False):
 # ----------------------------------------------------------------------
 
 def init_db():
-    # Usamos el context manager con commit=True
     try:
         with get_db_cursor(commit=True) as cur:
             # Crear tabla de productos
@@ -72,62 +76,164 @@ def init_db():
                     ('Laptop', 1200.50, 10),
                     ('Mouse', 25.99, 50),
                     ('Teclado', 75.00, 30)
-                ON CONFLICT (id) DO NOTHING 
-                -- NOTA: La columna 'id' es SERIAL, 'ON CONFLICT DO NOTHING' no es ideal para ID SERIAL. 
-                -- Se puede reemplazar por una columna UNIQUE (como 'nombre') o eliminar. 
-                -- Mantenemos por simplicidad, aunque no es el uso más correcto aquí.
+                ON CONFLICT DO NOTHING
             ''')
-        print("Base de datos inicializada y tabla 'productos' creada.")
+        print("Base de datos inicializada y tabla 'productos' creada. ✅")
     except Exception as e:
-        print(f"Error al inicializar la base de datos: {e}")
-        # La aplicación debería detenerse si la DB no está lista
+        print(f"Error al inicializar la base de datos: {e} ❌")
+        # Es crucial detener la aplicación si la DB no está lista
         exit(1)
 
 # ----------------------------------------------------------------------
-# 🌟 MEJORA 2: Abstracción de Datos (Función de mapeo)
+# 🌟 MEJORA: Abstracción de Datos (Función de mapeo)
 # ----------------------------------------------------------------------
 
 def map_product_row(row, columns):
     """Mapea una fila de la DB (tupla) a un diccionario de producto."""
     if not row:
         return None
-    # Aseguramos que el precio sea float para la salida JSON
+    # Aseguramos la conversión de tipos para la salida JSON/HTML
     return {
         'id': row[0],
         'nombre': row[1],
-        'precio': float(row[2]), # Convertimos Decimal a float/string
+        'precio': float(row[2]),
         'stock': row[3],
-        'fecha_creacion': row[4].isoformat() if isinstance(row[4], datetime) else row[4]
+        'fecha_creacion': row[4].isoformat() if isinstance(row[4], datetime) else str(row[4])
     }
 
-# Columnas seleccionadas para facilitar el mapeo
 PRODUCT_COLUMNS = ['id', 'nombre', 'precio', 'stock', 'fecha_creacion']
 SELECT_QUERY = f'SELECT {", ".join(PRODUCT_COLUMNS)} FROM productos'
 
 # ----------------------------------------------------------------------
-# Endpoints de la API
+# ENDPOINTS DE INTERFAZ DE USUARIO (UI) - CRUD WEB
 # ----------------------------------------------------------------------
+
 
 @app.route('/')
 def home():
-    return jsonify({
-        "message": "🚀 API CRUD Python + PostgreSQL (Mejorada) 🐍",
-        "status": "Running",
-        "endpoints": {
-            "GET /productos": "Listar todos los productos",
-            "GET /productos/<id>": "Obtener un producto por ID",
-            "POST /productos": "Crear nuevo producto",
-            "PUT /productos/<id>": "Actualizar producto",
-            "DELETE /productos/<id>": "Eliminar producto"
-        }
-    })
+    """
+    Ruta raíz que ahora renderiza una página HTML de bienvenida
+    en lugar de devolver JSON.
+    """
+    # Lista de endpoints para mostrar en la página de bienvenida (opcional)
+    endpoints = {
+        "UI CRUD Productos": url_for('ui_productos'),
+        "API (JSON) /productos": url_for('obtener_productos')
+    }
+    # Renderiza la nueva plantilla 'welcome.html'
+    return render_template('welcome.html', endpoints=endpoints)
 
-# CREATE - Crear producto
+@app.route('/ui/productos', methods=['GET', 'POST'])
+def ui_productos():
+    if request.method == 'POST':
+        # --- Manejar la creación del producto (CREATE) ---
+        nombre = request.form.get('nombre')
+        precio_str = request.form.get('precio')
+        stock_str = request.form.get('stock', '0')
+        
+        if not nombre or not precio_str:
+            return redirect(url_for('ui_productos')) # Redirige si faltan datos
+        
+        try:
+            precio = float(precio_str)
+            stock = int(stock_str)
+            
+            with get_db_cursor(commit=True) as cur:
+                cur.execute(
+                    'INSERT INTO productos (nombre, precio, stock) VALUES (%s, %s, %s)',
+                    (nombre, precio, stock)
+                )
+            return redirect(url_for('ui_productos'))
+        except (ValueError, psycopg2.Error) as e:
+            return f"Error al crear producto: {e}", 500
+
+    # --- Mostrar la lista de productos (READ) ---
+    try:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(f'{SELECT_QUERY} ORDER BY id')
+            productos_data = cur.fetchall()
+            productos_list = [map_product_row(p, PRODUCT_COLUMNS) for p in productos_data]
+            
+            return render_template('productos.html', productos=productos_list)
+    except Exception as e:
+        return f"Error al cargar productos: {e}", 500
+
+@app.route('/ui/productos/editar/<int:producto_id>', methods=['GET', 'POST'])
+def ui_editar_producto(producto_id):
+    if request.method == 'POST':
+        # --- Manejar la actualización (UPDATE) ---
+        nombre = request.form.get('nombre')
+        precio_str = request.form.get('precio')
+        stock_str = request.form.get('stock')
+        
+        update_fields = []
+        values = []
+        
+        if nombre:
+            update_fields.append("nombre = %s")
+            values.append(nombre)
+        if precio_str:
+            try:
+                values.append(float(precio_str))
+                update_fields.append("precio = %s")
+            except ValueError:
+                return "Precio debe ser un número válido", 400
+        if stock_str:
+            try:
+                values.append(int(stock_str))
+                update_fields.append("stock = %s")
+            except ValueError:
+                return "Stock debe ser un entero válido", 400
+
+        if not update_fields:
+            return redirect(url_for('ui_productos'))
+
+        try:
+            with get_db_cursor(commit=True) as cur:
+                values.append(producto_id)
+                query = f'UPDATE productos SET {", ".join(update_fields)} WHERE id = %s'
+                cur.execute(query, values)
+                return redirect(url_for('ui_productos'))
+        except (psycopg2.Error, Exception) as e:
+            return f"Error al actualizar producto: {e}", 500
+    
+    # --- Mostrar el formulario de edición (GET) ---
+    try:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(f'{SELECT_QUERY} WHERE id = %s', (producto_id,))
+            producto = map_product_row(cur.fetchone(), PRODUCT_COLUMNS)
+            
+            if not producto:
+                return "Producto no encontrado", 404
+            
+            # Cargamos todos los productos para que la tabla siga visible
+            cur.execute(f'{SELECT_QUERY} ORDER BY id')
+            productos_data = cur.fetchall()
+            productos_list = [map_product_row(p, PRODUCT_COLUMNS) for p in productos_data]
+
+            return render_template('productos.html', producto_a_editar=producto, productos=productos_list)
+    except Exception as e:
+        return f"Error al cargar producto para edición: {e}", 500
+
+@app.route('/ui/productos/eliminar/<int:producto_id>', methods=['POST'])
+def ui_eliminar_producto(producto_id):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute('DELETE FROM productos WHERE id = %s', (producto_id,))
+            # Redirige a la vista principal después de la eliminación
+            return redirect(url_for('ui_productos'))
+    except Exception as e:
+        return f"Error al eliminar producto: {e}", 500
+
+
+# ----------------------------------------------------------------------
+# ENDPOINTS API (JSON) - Originales (Mantenidos para compatibilidad)
+# ----------------------------------------------------------------------
+
+# CREATE - Crear producto (JSON)
 @app.route('/productos', methods=['POST'])
 def crear_producto():
     data = request.get_json()
-    
-    # 🌟 MEJORA 3: Validación de entrada (más estricta)
     nombre = data.get('nombre')
     precio = data.get('precio')
     stock = data.get('stock', 0)
@@ -136,7 +242,6 @@ def crear_producto():
         return jsonify({"error": "Nombre y precio son requeridos"}), 400
     
     try:
-        # Intentamos convertir a float/int para validar tipo de dato
         precio = float(precio)
         stock = int(stock)
     except (ValueError, TypeError):
@@ -150,24 +255,18 @@ def crear_producto():
             )
             nuevo_producto = cur.fetchone()
             
-            if nuevo_producto:
-                producto_data = map_product_row(nuevo_producto, PRODUCT_COLUMNS)
-                return jsonify(producto_data), 201
-            else:
-                # Caso improbable, pero asegura un código 500 si la inserción falla sin lanzar excepción.
-                return jsonify({"error": "No se pudo crear el producto"}), 500
+            producto_data = map_product_row(nuevo_producto, PRODUCT_COLUMNS)
+            return jsonify(producto_data), 201
     
     except psycopg2.Error as e:
-        # Manejo específico de errores de base de datos
         return jsonify({"error": f"Error de base de datos: {e.diag.message_primary}"}), 500
     except Exception as e:
         return jsonify({"error": f"Error interno del servidor: {str(e)}"}), 500
 
-# READ - Obtener todos los productos
+# READ - Obtener todos los productos (JSON, con paginación básica)
 @app.route('/productos', methods=['GET'])
 def obtener_productos():
     try:
-        # 🌟 MEJORA 4: Funcionalidad de Paginación/Filtro (Básica)
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 10, type=int)
         offset = (page - 1) * limit
@@ -178,7 +277,6 @@ def obtener_productos():
             cur.execute(sql, (limit, offset))
             productos = cur.fetchall()
             
-            # 🌟 MEJORA 2: Usamos la función de mapeo
             productos_list = [map_product_row(p, PRODUCT_COLUMNS) for p in productos]
             
             return jsonify(productos_list)
@@ -186,7 +284,7 @@ def obtener_productos():
     except Exception as e:
         return jsonify({"error": f"Error interno del servidor: {str(e)}"}), 500
 
-# READ - Obtener producto por ID
+# READ - Obtener producto por ID (JSON)
 @app.route('/productos/<int:producto_id>', methods=['GET'])
 def obtener_producto(producto_id):
     try:
@@ -204,19 +302,17 @@ def obtener_producto(producto_id):
     except Exception as e:
         return jsonify({"error": f"Error interno del servidor: {str(e)}"}), 500
 
-# UPDATE - Actualizar producto
+# UPDATE - Actualizar producto (JSON)
 @app.route('/productos/<int:producto_id>', methods=['PUT'])
 def actualizar_producto(producto_id):
     data = request.get_json()
     
-    # 🌟 MEJORA 3: Validación
     if not data:
         return jsonify({"error": "No hay datos para actualizar"}), 400
         
     update_fields = []
     values = []
     
-    # Mantenemos solo los campos válidos y los validamos
     if 'nombre' in data:
         update_fields.append("nombre = %s")
         values.append(data['nombre'])
@@ -258,12 +354,11 @@ def actualizar_producto(producto_id):
     except Exception as e:
         return jsonify({"error": f"Error interno del servidor: {str(e)}"}), 500
 
-# DELETE - Eliminar producto
+# DELETE - Eliminar producto (JSON)
 @app.route('/productos/<int:producto_id>', methods=['DELETE'])
 def eliminar_producto(producto_id):
     try:
         with get_db_cursor(commit=True) as cur:
-            # Solo necesitamos el ID y nombre para el mensaje de confirmación
             cur.execute('DELETE FROM productos WHERE id = %s RETURNING id, nombre', (producto_id,))
             producto_eliminado = cur.fetchone()
             
