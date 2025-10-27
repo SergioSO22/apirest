@@ -12,6 +12,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   api:
     build: .
@@ -25,7 +31,10 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - database
+      database:
+        condition: service_healthy
+    command: >
+      sh -c "sleep 10 && python app.py"
 
 volumes:
   postgres_data:
